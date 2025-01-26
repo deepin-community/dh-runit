@@ -8,12 +8,11 @@ use File::Find;
 use File::Path qw(make_path);
 use File::stat;
 use Text::Hogan::Compiler;
-use File::Slurp qw(read_file write_file);
+use File::Slurp qw(read_file write_file edit_file);
 use File::Copy::Recursive qw(dircopy);
 use feature 'signatures';
-no warnings 'experimental';
 
-our $VERSION = "2.10.3";
+our $VERSION = "2.16.4";
 
 # Create empty file {dest} and all required parent directories.
 sub create_empty_file {
@@ -47,16 +46,21 @@ sub template_from_data_directory {
 sub parse_options($opts) {
     my $conf = { enable => 1, onupgrade => 'restart' };
     for my $opt (split(/,/, $opts)) {
-        given($opt) {
-            when (/^disable$/)     { $conf->{enable} = 0; };
-            when (/^name=(.*)$/)   { $conf->{name} = $1; };
-            when (/^onupgrade=(.*)$/)   { $conf->{onupgrade} = $1; };
-            when (/^since=(.*)$/)  { $conf->{since} = $1; };
-            when (/^logscript$/)   { $conf->{logscript} = 1};
-            when (/^noreplace$/)   { $conf->{noreplace} = 1};
-            when (/^presubj$/)     { $conf->{presubj} = 1; };
-            when (/^defaults$/)    { "do nothing"; };
-            default                { error("unknown option `$opt'"); }
+        for($opt) {
+            if (/^disable$/)            { $conf->{enable} = 0; }
+            elsif (/^name=(.*)$/)       { $conf->{name} = $1; }
+            elsif (/^onupgrade=(.*)$/)  { $conf->{onupgrade} = $1; }
+            elsif (/^since=(.*)$/)      { $conf->{since} = $1; }
+            elsif (/^logscript$/)       { $conf->{logscript} = 1}
+            elsif (/^noreplace$/)       { $conf->{noreplace} = 1}
+            elsif (/^noscripts$/)       { $conf->{noscripts} = 1}
+            elsif (/^presubj$/)         { $conf->{presubj} = 1; }
+            elsif (/^usr$/)             { $conf->{usr} = 1}
+            elsif (/^finish$/)          { $conf->{finish} = 1}
+            elsif (/^nofinish$/)        { $conf->{nofinish} = 1}
+            elsif (/^bin=(.*)$/)        { $conf->{bin} = $1; }
+            elsif (/^defaults$/)        { }  #do nothing
+            else                        { error("unknown option `$opt'"); }
         }
     }
     return $conf;
@@ -103,7 +107,7 @@ PKG: foreach my $pkg (@{$dh{DOPACKAGES}}) {
     next unless @entries;
 
     my $tmp = tmpdir($pkg);
-    my $sv_dir = "$tmp/etc/sv";
+#    my $sv_dir = "$tmp/etc/sv";
 
     for (@entries) {
         (my $path, my $opts) = @$_;
@@ -112,6 +116,15 @@ PKG: foreach my $pkg (@{$dh{DOPACKAGES}}) {
         my $conf = parse_options($opts);
         my $name = $conf->{name} || basename($path);
 
+        if ($conf->{usr}) {
+            error("usr must be used together with bin option") unless ($conf->{bin});
+        }
+
+        my $sv_dir = "$tmp/etc/sv" unless ($conf->{usr});
+        $sv_dir = "$tmp/usr/share/runit/sv" if ($conf->{usr}) ;
+        my $meta_dir = "$sv_dir/$name/.meta";
+        my $finish ="$sv_dir/$name/finish";
+
         my @upgrades = ("restart", "stop", "nostop", "reload");
         foreach my $upstring (@upgrades) {
 			last if ($conf->{onupgrade} eq $upstring );
@@ -119,17 +132,31 @@ PKG: foreach my $pkg (@{$dh{DOPACKAGES}}) {
         }
 
         if ($conf->{onupgrade} eq 'nostop' || $conf->{onupgrade} eq 'reload') {
-            create_empty_file("${tmp}/usr/share/runit/meta/${name}/noreplace");
+            create_empty_file("$meta_dir/noreplace");
         }
 
-        if ($conf->{noreplace}) {
-            warning("the noreplace option is deprecated, please use onupgrade=nostop instead");
+        #Metafiles: ## note that usr requires bin but bin does not require usr
+        if ($conf->{bin}) {
+            # set ownership of the service in /etc, by packagename
+            create_empty_file("$meta_dir/pkg");
+            write_file("$meta_dir/pkg", "$pkg");
+            create_empty_file("$meta_dir/bin");
+            write_file("$meta_dir/bin", $conf->{bin});
+            #service upgrade action; restart is the implicit default, only write non-defaults values
+            if ($conf->{onupgrade} ne "restart" ) {
+                write_file("$meta_dir/onupgrade", $conf->{onupgrade});
+            }
+            #enable/disable: enable=yes is the default value, only write non-default 'no'
+            write_file("$meta_dir/enable", 'no') unless($conf->{enable});
+	}
+        unless($conf->{usr}) {
+	    # These files allow handling of uninstalled-not-purged situation.
+	    make_path("${tmp}/usr/share/runit/meta/${name}");
+            create_empty_file("${tmp}/usr/share/runit/meta/${name}/installed");
+            create_empty_file("${tmp}/etc/sv/${name}/.meta/installed");
         }
 
-        # These files allow handling of uninstalled-not-purged situation.
-        create_empty_file("${tmp}/usr/share/runit/meta/${name}/installed");
-        create_empty_file("${tmp}/etc/sv/${name}/.meta/installed");
-
+        #install the service: run, finish, log, supervise links
         if ( -f $path) {
             install_dir("$sv_dir/$name");
             install_prog($path, "$sv_dir/$name/run");
@@ -138,46 +165,62 @@ PKG: foreach my $pkg (@{$dh{DOPACKAGES}}) {
             # Unfortunately, dh_fixperms does not handle executable bit here.
             ensure_executable("$sv_dir/$name");
         }
-        make_symlink("/etc/sv/$name/supervise", "/run/runit/supervise/$name", $tmp);
+        edit_file { s/##bin##/$conf->{bin}/g } "$sv_dir/$name/run";
         install_dir("$tmp/etc/runit/runsvdir/default");
+
+        my $finishdatadir = $ENV{DH_RUNIT_DATADIR} || "/usr/share/dh-runit/data";
+        if ($conf->{finish}) {
+            install_prog("$finishdatadir/finish", "$finish") unless(-e $finish);
+        }
+
+        if ($conf->{logscript}) {
+            my $logdir = "/var/log/runit/$name";
+            if (-e "$sv_dir/$name/log/run") {
+                error("logscript option but log/run already exists");
+	    }
+	        elsif  ($conf->{usr}) {
+	        #create_empty_file("$meta_dir/logscript"); #use the empty log dir instead
+	        install_dir("$sv_dir/$name/log");
+	    }
+                else {
+                install_dir("$sv_dir/$name/log");
+                install_dir($tmp . $logdir);
+                template_from_data_directory('logscript', "$sv_dir/$name/log/run",
+                                         { logdir => $logdir }, 0755);
+	    }
+        }
 
         my $substitutions = {
             NAME   => $name,
             ENABLE => $conf->{enable} ? "yes" : "no",
             ONUPGRADE => $conf->{onupgrade}
         };
-
-        runit_autoscript($pkg, 'postrm', $substitutions);
-        runit_autoscript($pkg, 'postinst', $substitutions);
-        runit_autoscript($pkg, 'prerm', $substitutions);
-
-        if ($conf->{since}) {
-            warning("the since option is deprecated and will be removed in future release of dh-runit");
-        }
-        
-        if ($conf->{logscript}) {
-            my $logdir = "/var/log/runit/$name";
-
-            install_dir("$sv_dir/$name/log");
-            install_dir($tmp . $logdir);
-
-            template_from_data_directory('logscript', "$sv_dir/$name/log/run",
-                                         { logdir => $logdir }, 0755);
-
-            make_symlink("/etc/sv/$name/log/supervise", "/run/runit/supervise/$name.log", $tmp);
-        } elsif ( -e "$sv_dir/$name/log/run") {
-	    make_symlink("/etc/sv/$name/log/supervise", "/run/runit/supervise/$name.log", $tmp);
+        unless ($conf->{noscripts}) {
+            runit_autoscript($pkg, 'postinst', $substitutions) unless ($conf->{bin});
+            runit_autoscript($pkg, 'prerm', $substitutions) unless ($conf->{bin});
+            runit_autoscript($pkg, 'postrm', $substitutions);
         }
 
         if ($conf->{presubj}) {
             if ( -e "debian/$pkg.bug-presubj") {
-		warning("presubj for $pkg already exists and takes precedence, runit presubj file not installed")
+                warning("presubj for $pkg already exists and takes precedence, runit presubj file not installed")
             }
-	    else {
+            else {
              template_from_data_directory('presubj', "$tmp/usr/share/bug/$pkg/presubj",
                                           { pkg => $pkg }, 0644);
-	    }
+            }
          }
+
+         #opts scheduled for removal in 3.0 release
+         if ($conf->{nofinish}) {
+            warning("the nofinish option is deprecated and will be removed in 3.0 release of dh-runit");
+	}
+         if ($conf->{since}) {
+            warning("the since option is deprecated and will be removed in 3.0 release of dh-runit");
+        }
+         if ($conf->{noreplace}) {
+            warning("the noreplace option is deprecated, please use onupgrade=nostop instead");
+        }
     }
     # runit=2.1.2-20 introduced 'runit-log' user
     # runit=2.1.2-23 introduced /lib/runit/invoke-run
@@ -185,9 +228,12 @@ PKG: foreach my $pkg (@{$dh{DOPACKAGES}}) {
     # runit-helper 2.8.15 use dotlinks to mark a service as disabled, 'since' option is deprecated
     # runit-helper 2.9.0 has code for loguser transition
     # dh-runit 2.10.0 introduce the 'onupgrade' option that needs support in runit-helper
-    addsubstvar($pkg, 'runit:Conflicts', 'runit', '<< 2.1.2-36~');
-    addsubstvar($pkg, 'runit:Breaks', 'runit', '<< 2.1.2-36~');
-    addsubstvar($pkg, 'misc:Depends', 'runit-helper', '>= 2.10.0~');
+    # runit 2.1.2-46 introduces /lib/runit/make_svlinks
+    # runit-helper 2.14.0 calls make_svlinks in postinst
+    # runit 2.1.2-51 stops checking meta in /usr/share/runit/meta/$name (except for installed)
+    addsubstvar($pkg, 'runit:Conflicts', 'runit', '<< 2.1.2-51~');
+    addsubstvar($pkg, 'runit:Breaks', 'runit', '<< 2.1.2-51~');
+    addsubstvar($pkg, 'misc:Depends', 'runit-helper', '>= 2.14.0~');
 }
 
 # PROMISE: DH NOOP WITHOUT runit
@@ -231,8 +277,8 @@ are errors. The following options are recognized:
 
 Install the runscript but do not enable it by default.
 This means that the corresponding service will not be started.
-The service can be enabled manually by the system administrator or
-automatically using update-service(8).
+The service can be enabled by the system administrator manually or
+with update-service(8).
 
 =item I<name>=preferred-name
 
@@ -250,9 +296,9 @@ contains a F</log/run> script.
 
 =item I<onupgrade>=string
 
-This option controls what to do during the upgrade of a service
-when runit is PID 1; 
-it takes one of the following strings as argument:
+This option controls the debhelper action performed during the upgrade
+of the service, when runit is PID 1, and it takes one of the following
+strings as argument:
 
 F<restart>
  restart the service in postinstall, after all files of the package are
@@ -279,29 +325,52 @@ F<nostop>
 
 F<reload>
  similar to nostop, but the service configuration is reloaded (HUP) during the upgrade. 
- This might be useful in cases  (like dbus) where the service does not support restarting
+ This might be useful in cases (like dbus) where the service does not support restarting
  on upgrade and where reloading the config instead of restarting makes sense.
  When this option is set the B<invoke-run> interpreter, provided by I<runit>
  package, will refrain to automatically replace the sysvinit-managed 
  instance of the service with a runit-managed instance (replacement requires manual
  intervention or a system restart).
- 
-Please note that F<onupgrade> does not control whether the service will be started
+
+The F<onupgrade> option does not control whether the service will be started
 after the first install of the package; by default the service is always started
 if it's enabled (and stopped before removal). To not start the service after the
 first install you should use the 'disable' option.
+The upgrade action usually happens in postinst, however if the bin option is used,
+the action is performed at the end of the upgrade process, with a noawait trigger
+on runit's package side.
 
-=item I<since>
+=item I<noscripts>
 
-Since dh-runit 2.8.15 this option is no longer needed and is deprecated.
-It's retained only for backward compatibility with packages that still
-use it. See #942323
+With this option dh-runit will not add its snippets to maintscripts; actions like
+enable or disable, start, stop, restart and purge the service need manual editing of
+maintaner scripts.
 
-=item I<noreplace>
+=item I<usr>
 
-Since dh-runit 2.9.0 this option is deprecated and it's retained only for backward
-compatibility.
-You can use onupgrade=nostop instead.
+With this option dh-runit will install the service directory under /usr/share/runit/sv/
+instead of the default /etc/sv/. It must be used together with the 'bin' option or 
+dh-runit will exit with an error. This option is experimental, is mainly intended
+for a catch-all runscript package and may produce a buggy package (that fails
+the piuparts purge test).
+
+=item I<finish>
+
+Install a standard finish file with the service; if there is already a finish file
+inside the service directory, this option does nothing.
+
+=item I<bin>=/full/path/to/bin
+
+The full path to the binary that is exec'd in the runscript should be provided.
+When this option is used, additional metafiles are written inside the service
+directory so that postinstall and prerm actions that are usually performed inside
+maintainer scripts are performed with a trigger on runit package side.
+When this option is used, only the postrm snippet that handles purge action is
+written while postinst and prerm snippets are skipped.
+Additionally, all instances (if any) of '##bin##' in the runscript are automatically
+replaced with the path provided with this option; this is done so that the path of
+the bin can be maintained only in the control file.
+This option is experimental.
 
 =item I<presubj>
 
@@ -309,12 +378,28 @@ Include presubj file for reportbug into generate package. This file contains
 note that suggest including runit maintainers into copy of bug reports, related
 to runit integration. If the package already include it's own presubj file, that file
 takes precedence over runit presubj file.
-
 This may make life of package maintainer who uses another init system easier.
 
 =item I<defaults>
 
 If you don't need other options, specify this one.
+
+=item I<since>
+
+Since dh-runit 2.8.15 this option is no longer needed and is deprecated.
+It's retained only for backward compatibility with packages that still
+use it (see #942323). It's scheduled for removal with 3.0 release.
+
+=item I<noreplace>
+
+Since dh-runit 2.9.0 this option is deprecated and it's retained only for backward
+compatibility and it's scheduled for removal with 3.0 release.
+You can use onupgrade=nostop instead.
+
+=item I<nofinish>
+
+This option is deprecated, does nothing and it's scheduled for removal
+with 3.0 release.
 
 =back
 

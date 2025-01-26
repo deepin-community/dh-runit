@@ -1,0 +1,1 @@
+debian/test.rundir name=test,bin=/bin/true

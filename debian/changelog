@@ -1,8 +1,179 @@
+dh-runit (2.16.4) unstable; urgency=medium
+
+  * runit-helper: add policy-rc.d check in postinst and prerm
+  * runit-helper: test for runsvdir before sending ALRM
+
+ -- Lorenzo Puliti <plorenzo@disroot.org>  Sat, 26 Oct 2024 13:14:13 +0200
+
+dh-runit (2.16.3) unstable; urgency=medium
+
+  * move aliased files from / to /usr (DEP17) (Closes: #1073751)
+  * bump Standards-Version to 4.7.0
+  * bin opt: auto-replace instances of ##bin##
+  * guard against unforseen usrmerge pitfalls
+  * runit-helper: add code to purge services in /usr
+
+ -- Lorenzo Puliti <plorenzo@disroot.org>  Sat, 13 Jul 2024 02:53:52 +0200
+
+dh-runit (2.16.2) unstable; urgency=medium
+
+  * dh_runit: stop using given/when.
+     + Thanks: gregor herrmann <gregoa@debian.org>
+         (Closes: #1060709)
+  * minor update to dh_runit manpage
+  * update copyright years
+
+ -- Lorenzo Puliti <plorenzo@disroot.org>  Tue, 16 Jan 2024 02:51:27 +0100
+
+dh-runit (2.16.1) experimental; urgency=medium
+
+  * revert mark default-disabled services with dot-links
+
+ -- Lorenzo Puliti <plorenzo@disroot.org>  Thu, 15 Jun 2023 02:34:17 +0200
+
+dh-runit (2.16.0) experimental; urgency=medium
+
+  * runit-helper:
+      - remove loguser transition code
+      - remove supervise transition code (Closes: #969514)
+  * symplify metafiles interface:
+      - remove 'logscript', use empty log directory instead
+      - remove 'noscripts', no longer used
+      - create 'enable' only when non-default 'no' is requested
+      - create 'onupgrade' only when the string is different from
+        the default 'restart'
+  * 'usr' option now require 'bin', no longer require 'noscripts'
+  * adjust metafiles code when 'usr' is used since it's no longer
+     coupled with 'noscripts'
+  * update dh_runit manpage
+  * runit-helper:
+      - remove symlinks before supervise files, necessary
+        since purge can now be run before the (noawait) trigger code
+      - mark default-disabled services with dot-links, because of #1022837
+  * update testsuite
+  * update copyright years
+
+ -- Lorenzo Puliti <plorenzo@disroot.org>  Wed, 05 Apr 2023 16:13:32 +0200
+
+dh-runit (2.15.2) unstable; urgency=medium
+
+  * bump Standards-Version
+  * release to unstable
+
+ -- Lorenzo Puliti <plorenzo@disroot.org>  Tue, 27 Dec 2022 00:25:36 +0100
+
+dh-runit (2.15.1) experimental; urgency=medium
+
+  * Remove duplicate metafiles
+  * update tests for metafiles
+
+ -- Lorenzo Puliti <plorenzo@disroot.org>  Mon, 14 Nov 2022 17:00:56 +0100
+
+dh-runit (2.15.0) unstable; urgency=medium
+
+  * metafiles: write packagename inside a pkg file
+  * Add a bin option, useful for triggered upgrade
+  * update dh-runit manpage
+  * Revert "Temporary disable ghc testsuite"
+  * Update testsuite
+
+ -- Lorenzo Puliti <plorenzo@disroot.org>  Wed, 19 Oct 2022 01:15:02 +0200
+
+dh-runit (2.14.2) unstable; urgency=medium
+
+  * Fix wrong path for noreplace metafile (Closes: #1018817)
+
+ -- Lorenzo Puliti <plorenzo@disroot.org>  Wed, 31 Aug 2022 11:56:38 +0200
+
+dh-runit (2.14.1) unstable; urgency=medium
+
+  * Avoid spurious warning during postinstall
+  * Move metafiles inside the service directory
+  * Remove supervise symlinks at postrm
+  * Upload to unstable
+
+ -- Lorenzo Puliti <plorenzo@disroot.org>  Tue, 02 Aug 2022 00:38:33 +0200
+
+dh-runit (2.14.0) experimental; urgency=medium
+
+  * Stop creating supervise links as part of
+     the deb package (Closes: #942053)
+  * Create supervise links at runtime with make_svlinks,
+     but only when runit package is installed
+     (Closes: #935939)
+  * Use finish-exec instead of finish-default
+  * Bump minimal required version of runit and runit-helper
+  * Do not install the log service with usr option
+  * Error when log service already exists and logscript
+     option is given
+  * Update testsuite
+  * Temporary disable ghc testsuite, libghc-shake-dev
+     is not installable in Sid
+
+ -- Lorenzo Puliti <plorenzo@disroot.org>  Sat, 02 Jul 2022 12:09:54 +0200
+
+dh-runit (2.13.1) unstable; urgency=medium
+
+  * Add ${perl:Depends} to dh-runit depends
+  * Fix wrong comment in prerm snippet
+  * Revert "Enable the testsuite on armhf/armel"
+  * Bump Standards-Version to 4.6.1, no changes required
+
+ -- Lorenzo Puliti <plorenzo@disroot.org>  Sun, 15 May 2022 02:26:43 +0200
+
+dh-runit (2.13.0) unstable; urgency=medium
+
+  * Release to unstable
+  * d/copyright: set upstream contanct
+  * Create enable and onupgrade metafiles only with
+     noscripts option
+  * runit-helper: small code improvements
+  * Re-enable the testsuite on armhf/armel (Closes: #969513)
+  * Reverse logic for finish files: no longer
+     create a finish file by default, add a finish option
+     and deprecate the nofinish option
+  * Update the testsuite for finish and metafiles
+     related changes
+
+ -- Lorenzo Puliti <plorenzo@disroot.org>  Mon, 25 Apr 2022 21:27:48 +0200
+
+dh-runit (2.12.0) experimental; urgency=medium
+
+  * Provide dh-sequence-runit (Closes: #1002801)
+     + thanks to Colin Watson <cjwatson@debian.org>
+  * Bump Standards-Version to 4.6.0, no changes required
+  * Update copyright years
+  * dh-runit:
+     - Use a separate metafile for enable and upgrade
+     - Metafiles: expose also noscripts and logscript
+     - Create a matafile for package
+     - Update tests for metafiles and usr
+     - dh-runit code overhaul
+     - Check for DPKG_ROOT in maintscripts
+  * runit-helper: warn on sv failure
+  * Fix lintian overrides
+  * Fix typo in 2.10.3 changelog entry
+
+ -- Lorenzo Puliti <plorenzo@disroot.org>  Mon, 11 Apr 2022 03:44:16 +0200
+
+dh-runit (2.11.0) experimental; urgency=medium
+
+  * Expose enable and onupgrade as metafiles
+  * Add a noscripts option
+  * Add a usr option
+  * Add a test for the usr option
+  * Add a test for the enable metafile
+  * Install a finish file by default
+  * Add a nofinish option
+  * Update tests for finish and nofinish
+
+ -- Lorenzo Puliti <plorenzo@disroot.org>  Fri, 23 Apr 2021 18:10:02 +0200
+
 dh-runit (2.10.3) unstable; urgency=medium
 
   * Always create supervise link for log service (Closes: #977925)
   * Add 2 testcase for supervise links
-  * Bump out version to 2.10.3
+  * Bump our version to 2.10.3
   * Bump Stadards-Version to 4.5.1
 
  -- Lorenzo Puliti <plorenzo@disroot.org>  Tue, 29 Dec 2020 12:45:18 +0100

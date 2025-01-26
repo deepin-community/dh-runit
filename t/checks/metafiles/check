@@ -1,0 +1,13 @@
+#!/usr/bin/perl
+use strict;
+use warnings;
+use Test::More tests => 6;
+
+my $metadir = 'debian/dh-runit-test/usr/share/runit/meta/test';
+my $metaetc = 'debian/dh-runit-test/etc/sv/test/.meta';
+ok(! -f "${metadir}/enable", 'enable metafile not created created');
+ok(! -f "${metadir}/onupgrade", 'upgrade metafile not created');
+ok(! -f "$metaetc/enable", 'enable metafile not created created in .meta');
+ok(! -f "$metaetc/onupgrade", 'upgrade metafile not created in .meta');
+ok(-f "${metadir}/installed", 'metafile for installed created under usr');
+ok(-f "${metaetc}/installed", 'metafile for installed created in etc');

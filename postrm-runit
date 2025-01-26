@@ -5,6 +5,6 @@
 # into postrm script of -run package, but it would be like static
 # linking, requiring rebuild of all reverse dependencies on every
 # change of dh-runit.
-if [ -x /lib/runit-helper/runit-helper ] ; then
-   NAME='#NAME#' ENABLE='#ENABLE#' ONUPGRADE='#ONUPGRADE#' /lib/runit-helper/runit-helper postrm "$@"
+if [ -z "${DPKG_ROOT:-}" ] && [ -x /usr/lib/runit-helper/runit-helper ] ; then
+   NAME='#NAME#' ENABLE='#ENABLE#' ONUPGRADE='#ONUPGRADE#' /usr/lib/runit-helper/runit-helper postrm "$@"
 fi

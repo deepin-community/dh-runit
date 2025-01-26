@@ -1,0 +1,1 @@
+debian/test.rundir name=test,noscripts,usr,bin=/bin/true

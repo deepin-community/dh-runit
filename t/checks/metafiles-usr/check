@@ -1,0 +1,16 @@
+#!/usr/bin/perl
+use strict;
+use warnings;
+use Test::More tests => 8;
+
+my $svdir = 'debian/dh-runit-test/usr/share/runit/sv/test';
+my $metadir = 'debian/dh-runit-test/usr/share/runit/meta/test';
+my $svmetadir = 'debian/dh-runit-test/usr/share/runit/sv/test/.meta';
+ok(! -f "${svmetadir}/enable", 'metafile for enable is implicit');
+ok(! -f "${svmetadir}/onupgrade", 'metafile for upgrade is implicit');
+ok(! -f "${metadir}/installed", 'metafile for installed not created');
+ok(! -f "${svmetadir}/logscript", 'metafile for logscript not created');
+ok(! -d "${svdir}/log", 'empty log directory created');
+ok(! -f "${svmetadir}/noscripts", 'metafile for noscripts not created');
+ok(-f "${svmetadir}/pkg", 'metafile for pkg correctly created');
+ok(-f "${svmetadir}/bin", 'metafile for bin correctly created');
