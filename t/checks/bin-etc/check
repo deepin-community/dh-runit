@@ -1,0 +1,13 @@
+#!/usr/bin/perl
+use strict;
+use warnings;
+use Test::More tests => 5;
+
+my $svdir = 'debian/dh-runit-test/etc/sv/test';
+my $metadir = 'debian/dh-runit-test/usr/share/runit/meta/test';
+my $svmetadir = 'debian/dh-runit-test/etc/sv/test/.meta';
+ok(! -f "${svmetadir}/enable", 'metafile for enable is implicit');
+ok(! -f "${svmetadir}/onupgrade", 'metafile for upgrade is implicit');
+ok( -f "${metadir}/installed", 'metafile for installed created');
+ok(-f "${svmetadir}/pkg", 'metafile for pkg correctly created');
+ok(-f "${svmetadir}/bin", 'metafile for bin correctly created');

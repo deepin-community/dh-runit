@@ -2,10 +2,12 @@
 use strict;
 use strict;
 use warnings;
-use Test::More tests => 3;
+use Test::More tests => 4;
 
 my $runscript = 'debian/dh-runit-test/etc/sv/test/run';
 ok(-f $runscript, "runscript is correctly copied");
 ok(-x $runscript, "runscript is correctly set executable");
 my $finish = 'debian/dh-runit-test/etc/sv/test/finish';
-ok(! -f $finish, "finish file is not installed");
+ok(-f $finish, "finish file is correctly copied");
+ok(-x $finish, "finish file is correctly set executable");
+

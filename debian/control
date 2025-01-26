@@ -10,7 +10,7 @@ Build-Depends:
  libtext-hogan-perl,
  libfile-slurp-perl,
  libghc-shake-dev,
-Standards-Version: 4.5.1
+Standards-Version: 4.7.0
 Rules-Requires-Root: no
 Vcs-Browser: https://salsa.debian.org/debian/dh-runit
 Vcs-Git: https://salsa.debian.org/debian/dh-runit.git
@@ -23,8 +23,10 @@ Depends: debhelper (>= 9),
          libtext-hogan-perl,
          libfile-slurp-perl,
          libfile-copy-recursive-perl,
+         ${perl:Depends},
          ${misc:Depends},
          ${shlibs:Depends}
+Provides: dh-sequence-runit
 Description: debhelper add-on to handle runit runscripts
  dh-runit provides a debhelper sequence addon named 'runit' and the
  dh_runit command.

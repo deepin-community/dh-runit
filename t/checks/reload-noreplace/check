@@ -3,7 +3,7 @@ use strict;
 use warnings;
 use Test::More tests => 3;
 
-my $noreplace = 'debian/dh-runit-test/usr/share/runit/meta/test/noreplace';
+my $noreplace = 'debian/dh-runit-test/etc/sv/test/.meta/noreplace';
 ok(-f $noreplace, 'noreplace file correctly created');
 my $logscript = 'debian/dh-runit-test/etc/sv/test/log/run';
 ok(-f $logscript, 'logscript correctly created');

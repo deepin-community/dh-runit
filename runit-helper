@@ -33,6 +33,11 @@ is_enabled () {
 	[ -h /etc/service/"$NAME" ]
 }
 
+sv_warn () {
+	echo "warning: sv: failed to signal $NAME"
+	true
+}
+
 # workaround for races as in #919296
 ok_pipe () {
 	[ -p "/etc/sv/$NAME/supervise/ok" ]
@@ -41,77 +46,45 @@ ok_pipe () {
 postinst () {
 	local action="${1}" previous="${2:-}"
 
-	# loguser transition: to be removed when the transition is done 
-	# we do ths before enable to avoid races
-	# old loguser is 'runit-log', new is '_runit-log'
-	# 'current' and 'lock' files in the run directory must be owned by
-	# the new loguser
-	if [ "${ENABLE}" = yes ] && \
-		[ -f "/var/log/runit/$NAME/current" ] ; then
-		loguser="$(stat --format '%U' /var/log/runit/$NAME/current)"
-		if [ "${loguser}" = "runit-log" ]; then
-			sv d "/etc/sv/$NAME/log" >/dev/null || true
-			chown _runit-log:adm /var/log/runit/$NAME/current
-			chown _runit-log:adm /var/log/runit/$NAME/lock
+	if [ -x /usr/sbin/policy-rc.d ]; then
+		set +e ; /usr/sbin/policy-rc.d "${NAME}" start ; rc=$? ; set -e
+		if [ "$rc" = "101" ]; then
+			echo "runit: ${NAME}: start action denied by policy-rc.d" && return 0
 		fi
+	fi
+	# create supervise links at runtime, only if runit is installed
+	mkdir -p /run/runit/supervise
+	if [ -e /lib/runit/make_svlinks ]; then
+		/lib/runit/make_svlinks "$NAME"
 	fi
 
 	# It is important to not override local admin
 	# decision (see #899242 and 942323 ).
-	if [ "${ENABLE}" = yes ] && \
-		[ ! -h "/etc/runit/runsvdir/default/.$NAME" ] ; then
-		# avoid infinte loop of symlinks
-		if [ ! -h "/etc/runit/runsvdir/default/$NAME" ]; then
+	if [ "${ENABLE}" = yes ]; then
+		if [ ! -h "/etc/runit/runsvdir/default/.$NAME" ] && \
+		    [ ! -h "/etc/runit/runsvdir/default/$NAME" ]; then
+			# $NAME link tested to avoid infinte loop of symlinks
 			ln -sf "/etc/sv/$NAME" "/etc/runit/runsvdir/default/$NAME"
-			if is_runit ; then
+			if is_runit && pidof runsvdir > /dev/null ; then
 				# always force a rescan after enable
 				kill -s ALRM 1
 			fi
 		fi
-	fi
 	# ENABLE=no is always a no-op
-
-	# Upgrade will changes destination of /etc/sv/{name}/supervise symlink from
-	# /var/* to /run/*. If service was running, it important that its supervise
-	# directory is still accessible via /etc/sv/{name}/supervise symlink.
-	#
-	# This code must be removed once there are no more packages with
-	# /etc/sv/{name}/supervise -> /var/lib/runit/supervise/{name}
-	mkdir -p /run/runit/supervise
-
-	old="/var/lib/runit/supervise/${NAME}" 
-	new="/run/runit/supervise/${NAME}"
-	if [ -d "${old}" ] ; then
-		ln -sf "${old}" "${new}"
-	fi
-
-	old="/var/lib/runit/log/supervise/${NAME}" 
-	new="/run/runit/supervise/${NAME}.log"
-	if [ -d "${old}" ] ; then
-		ln -sf "${old}" "${new}"
-	fi
-
-	# loguser transition: to be removed when the transition is done
-	# we do this after enable to reduce chance of races
-	if [ "${ENABLE}" = yes ] && \
-		[ -f "/etc/sv/$NAME/log/run" ] ; then
-		if is_installed ; then
-			sv u "/etc/sv/$NAME/log" >/dev/null || true
-		fi
 	fi
 
 	#invoke-rc.d
-	if is_runit ; then
+	if is_runit && is_enabled ; then
 		if [ "${action}" = 'configure' ] || [ "${action}" = 'abort-upgrade' ] || \
 			[ "${action}" = 'abort-deconfigure' ] || [ "${action}" = 'abort-remove' ] ; then
-			if [ "${ONUPGRADE}" = restart ] && [ -n "${previous}" ] && is_enabled && ok_pipe ; then
-				sv restart ${NAME} || true
-			elif [ "${ONUPGRADE}" = reload ] && [ -n "${previous}" ] && is_enabled && ok_pipe ; then
-				sv reload ${NAME} || true
-			elif is_enabled && ok_pipe ; then
+			if [ "${ONUPGRADE}" = restart ] && [ -n "${previous}" ] && ok_pipe ; then
+				sv restart ${NAME} || sv_warn
+			elif [ "${ONUPGRADE}" = reload ] && [ -n "${previous}" ] && ok_pipe ; then
+				sv reload ${NAME} || sv_warn
+			elif  ok_pipe ; then
 				# ONUPGRADE=stop || ONUPGRADE=nostop
 				# ONUPGRADE= restart || reload and [ ! -n "${previous}" ]
-				sv start ${NAME} || true
+				sv start ${NAME} || sv_warn
 			else
 				return 0
 			fi
@@ -122,12 +95,18 @@ postinst () {
 prerm () {
 	local action="${1}"
 	# invoke-rc.d
-	if is_runit ; then
-		if [ "${ONUPGRADE}" = stop ] && is_enabled && ok_pipe ; then
-			sv stop ${NAME} || true
-		elif [ "${action}" = 'remove' ] && is_enabled && ok_pipe ; then
+	if is_runit && is_enabled ; then
+		if [ -x /usr/sbin/policy-rc.d ]; then
+			set +e ; /usr/sbin/policy-rc.d "${NAME}" stop ; rc=$? ; set -e
+			if [ "$rc" = "101" ]; then
+				echo "runit: ${NAME}: stop action denied by policy-rc.d" && return 0
+			fi
+		fi
+		if [ "${ONUPGRADE}" = stop ] && ok_pipe ; then
+			sv stop ${NAME} || sv_warn
+		elif [ "${action}" = 'remove' ] && ok_pipe ; then
 			# ONUPGRADE=restart || ONUPGRADE=nostop
-			sv stop ${NAME} || true
+			sv stop ${NAME} || sv_warn
 		else
 			return 0
 		fi
@@ -147,14 +126,19 @@ postrm () {
 	if [ "${action}" = 'remove' ] && [ "${ENABLE}" = yes ] ; then
 		rm -f "/etc/runit/runsvdir/default/$NAME"
 	fi
+	if [ "${action}" = 'purge' ] ; then
+		rm -f "/etc/runit/runsvdir/default/$NAME"
+		rm -f "/etc/runit/runsvdir/default/.$NAME"
+		#TODO: make sure runsv exit before we remove supervise files, printf x on supervise
+	fi
 
 	# If runscript was never invoked, there will be no files
 	# in this directory, and `dpkg' will remove it. In this case,
 	# we have nothing to do.
-	for supervise in "/var/lib/runit/supervise/$NAME" \
-	                 "/var/lib/runit/log/supervise/$NAME" ; do
+	for supervise in "/etc/sv/$NAME/supervise" \
+	                 "/etc/sv/$NAME/log/supervise"; do
 		if [ -d "$supervise" ] ; then
-
+			#TODO test/loop that runsv is gone before remove supervise files
 			# Actually only `down' may be absent, but it does not
 			# matter.
 
@@ -169,17 +153,63 @@ postrm () {
 			#
 			# NOTE: Non-POSIX option is used. The day coreutils will
 			# no longer be essential, it will require a fix.
-			rmdir --ignore-fail-on-non-empty "$supervise"
+			if [ -h "$supervise" ]; then
+				rm "$supervise"
+			else
+				rmdir --ignore-fail-on-non-empty "$supervise"
+			fi
 		fi
 	done
 
 	if [ "${action}" = 'purge' ] ; then
-		rm -f "/etc/runit/runsvdir/default/$NAME"
-		rm -f "/etc/runit/runsvdir/default/.$NAME"
+		#rm -f "/etc/runit/runsvdir/default/$NAME"
+		#rm -f "/etc/runit/runsvdir/default/.$NAME"
 		readonly logdir="/var/log/runit/${NAME}"
 		if [ -d "${logdir}" ] ; then
 			rm -r "${logdir}"
 		fi
+	fi
+}
+
+#called as NAME='servicename' PKG='pkgname' /usr/lib/runit-helper/runit-helper sv_purge
+sv_purge () {
+	[ -z "$PKG" ] && echo "$PKG empty" && return 0
+	[ -z "$NAME" ] && echo "$NAME empty" && return 0
+	if echo "$NAME" | grep -E '.*/$' >/dev/null ; then
+		echo "warning: $NAME : not allowed, ends with /"
+		return 0  #ends with / , dangerous with rm -rf
+	fi
+	servicesdir=/usr/share/runit/sv.now
+	#if it's enabled, make sure runsv exits before the dir is removed
+	if [ -h /etc/runit/runsvdir/default/$NAME ]; then
+		if [ -r  /etc/runit/runsvdir/default/$NAME/supervise/stat ]; then
+			svstatus="$(cat /etc/runit/runsvdir/default/$NAME/supervise/stat)"
+		fi
+		case "$svstatus" in
+			run|down|'run, want down' )  #maybe also 'down, want up' and 'finish'
+			touch "/etc/runit/runsvdir/default/$NAME/down" || true
+			printf x >  "/etc/runit/runsvdir/default/$NAME/supervise/control" && \
+			  unlink "/etc/runit/runsvdir/default/$NAME"
+			;;
+			*)
+			unlink  "/etc/runit/runsvdir/default/$NAME"
+			;;
+		esac
+	fi
+	if [ -r "$servicesdir/$NAME/.meta/pkg" ]; then
+		thispkg="$(cat $servicesdir/$NAME/.meta/pkg)"
+		if [ "$thispkg" = "$PKG" ]; then
+			#TODO: also clean supervise in /run ?
+			rm -r  "$servicesdir/$NAME"
+			logdir="/var/log/runit/${NAME}"
+			if [ -d "${logdir}" ] ; then
+				rm -r "${logdir}"
+			fi
+		fi
+	else
+		#give up if not from this package
+		#should not happen in /usr/share/runit/sv.now/ but still..
+		return 0
 	fi
 }
 

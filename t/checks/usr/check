@@ -1,0 +1,17 @@
+#!/usr/bin/perl
+use strict;
+use warnings;
+use Test::More tests => 7;
+
+my $svrun = 'debian/dh-runit-test/usr/share/runit/sv/test/run';
+my $svdir = 'debian/dh-runit-test/etc/sv/test';
+ok(-f $svrun, 'run file correctly created under /usr/share/runit/sv/');
+ok(-x $svrun, 'run file is executable');
+ok(! -d $svdir, 'service not created under /etc/sv/');
+my $svlog = 'debian/dh-runit-test/usr/share/runit/sv/test/log/run';
+ok(! -f $svlog, 'log service not created');
+my $finish = 'debian/dh-runit-test/usr/share/runit/sv/test/finish';
+ok(-f $finish, 'finish file correctly created');
+ok(-x $finish, 'finish file is executable');
+my $superviselink = 'debian/dh-runit-test/usr/share/runit/sv/test/supervise';
+ok(! -l $superviselink, 'ok: supervise link not created');

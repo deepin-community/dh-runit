@@ -1,0 +1,1 @@
+debian/test.rundir name=test,noscripts,logscript,usr,onupgrade=reload,disable,bin=/bin/true
