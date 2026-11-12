@@ -1,8 +1,6 @@
 all:
-testrunner: testrunner.hs
-	ghc $<
-check: testrunner
-	./testrunner
-autopkgtest: testrunner
-	AUTOPKGTEST=1 ./testrunner
+check:
+	./testrunner.sh
+autopkgtest:
+	AUTOPKGTEST=1 ./testrunner.sh
 .PHONY: check

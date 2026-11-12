@@ -1,6 +1,5 @@
 Test-Command: make autopkgtest
-Depends: @, libghc-shake-dev
-Architecture: amd64, arm64, i386
+Depends: @,
 
 Tests: helper-update-rc.d
 Depends: runit-helper

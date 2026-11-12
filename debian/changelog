@@ -1,3 +1,11 @@
+dh-runit (2.16.4deepin1) unstable; urgency=medium
+
+  * Switch to testrunner.sh (shell testsuite)
+  * drop haskell testsuite (testrunner.hs)
+  * testsuite: remove architecture restrictions
+
+ -- Tianyu Chen <sweetyfish@deepin.org>  Thu, 12 Nov 2026 18:16:42 +0800
+
 dh-runit (2.16.4) unstable; urgency=medium
 
   * runit-helper: add policy-rc.d check in postinst and prerm

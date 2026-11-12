@@ -12,7 +12,7 @@ use File::Slurp qw(read_file write_file edit_file);
 use File::Copy::Recursive qw(dircopy);
 use feature 'signatures';
 
-our $VERSION = "2.16.4";
+our $VERSION = "2.16.4deepin1";
 
 # Create empty file {dest} and all required parent directories.
 sub create_empty_file {

@@ -9,7 +9,6 @@ Build-Depends:
  libfile-copy-recursive-perl,
  libtext-hogan-perl,
  libfile-slurp-perl,
- libghc-shake-dev,
 Standards-Version: 4.7.0
 Rules-Requires-Root: no
 Vcs-Browser: https://salsa.debian.org/debian/dh-runit
